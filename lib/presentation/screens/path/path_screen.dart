@@ -1,37 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ai_project/l10n/app_localizations.dart';
 import 'package:ai_project/presentation/components/day_plan_tile.dart';
-import 'package:ai_project/data/models/learning_path.dart';
+import 'package:ai_project/presentation/controller/path/path_cubit.dart';
+import 'package:ai_project/presentation/screens/details/day_details_screen.dart';
 
 class PathScreen extends StatelessWidget {
   final String pathId;
-  final FirebaseAuth? auth;
-  final FirebaseFirestore? firestore;
 
-  const PathScreen({
-    super.key, 
-    required this.pathId,
-    this.auth,
-    this.firestore,
-  });
+  const PathScreen({super.key, required this.pathId});
 
   @override
   Widget build(BuildContext context) {
-    final authInstance = auth ?? FirebaseAuth.instance;
-    final firestoreInstance = firestore ?? FirebaseFirestore.instance;
-    
-    final userId = authInstance.currentUser?.uid;
-
-    if (userId == null) {
-      return Scaffold(
-        appBar: AppBar(title: Text(AppLocalizations.of(context)!.errorTitle)),
-        body: Center(child: Text(AppLocalizations.of(context)!.errorNotAuthenticated)),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: Text(AppLocalizations.of(context)!.pathScreenTitle),
@@ -43,7 +24,9 @@ class PathScreen extends StatelessWidget {
                 context: context,
                 builder: (context) => AlertDialog(
                   title: const Text('Delete Path'),
-                  content: const Text('Are you sure you want to delete this learning path?'),
+                  content: const Text(
+                    'Are you sure you want to delete this learning path?',
+                  ),
                   actions: [
                     TextButton(
                       onPressed: () => Navigator.of(context).pop(false),
@@ -58,13 +41,11 @@ class PathScreen extends StatelessWidget {
               );
 
               if (confirm == true) {
-                await firestoreInstance
-                    .collection('users')
-                    .doc(userId)
-                    .collection('paths')
-                    .doc(pathId)
-                    .delete();
-                
+                if (context.mounted) {
+                  final cubit = context.read<PathCubit>();
+                  await cubit.deletePath();
+                }
+
                 if (context.mounted) {
                   context.pop();
                 }
@@ -73,59 +54,120 @@ class PathScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: firestoreInstance
-            .collection('users')
-            .doc(userId)
-            .collection('paths')
-            .doc(pathId)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+      body: BlocBuilder<PathCubit, PathState>(
+        builder: (context, state) {
+          if (state is PathLoading || state is PathInitial) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (snapshot.hasError || !snapshot.hasData || !snapshot.data!.exists) {
-            return Center(child: Text(AppLocalizations.of(context)!.errorPathNotFound));
+          if (state is PathError) {
+            return Center(
+              child: Text(
+                '${AppLocalizations.of(context)!.errorTitle}: ${state.message}',
+              ),
+            );
           }
 
-          final path = LearningPath.fromDocument(snapshot.data!);
+          if (state is PathNotFound) {
+            return Center(
+              child: Text(AppLocalizations.of(context)!.errorPathNotFound),
+            );
+          }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Text(
-                  path.title,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
-              ),
-              if (path.description.isNotEmpty)
+          if (state is PathLoaded) {
+            final path = state.path;
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                  padding: const EdgeInsets.all(16.0),
                   child: Text(
-                    path.description,
-                    style: Theme.of(context).textTheme.bodyLarge,
+                    path.title,
+                    style: Theme.of(context).textTheme.headlineSmall,
                   ),
                 ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: ListView.builder(
-                  itemCount: path.days.length,
-                  itemBuilder: (context, index) {
-                    final dayPlan = path.days[index];
-                    return DayPlanTile(
-                      dayPlan: dayPlan,
-                      onTap: () {
-                        context.push('/day_details', extra: dayPlan);
-                      },
+                if (path.description.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Text(
+                      path.description,
+                      style: Theme.of(context).textTheme.bodyLarge,
+                    ),
+                  ),
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    int totalTasks = 0;
+                    int completedTasks = 0;
+                    for (var day in path.days) {
+                      for (var task in day.tasks) {
+                        totalTasks++;
+                        if (task.isCompleted) {
+                          completedTasks++;
+                        }
+                      }
+                    }
+                    final progress = totalTasks == 0
+                        ? 0.0
+                        : completedTasks / totalTasks;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                'Progress',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                              Text(
+                                '${(progress * 100).toInt()}%',
+                                style: Theme.of(context).textTheme.titleMedium,
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          LinearProgressIndicator(
+                            value: progress,
+                            minHeight: 8,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                     );
                   },
                 ),
-              ),
-            ],
-          );
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: path.days.length,
+                    itemBuilder: (context, index) {
+                      final dayPlan = path.days[index];
+                      return DayPlanTile(
+                        dayPlan: dayPlan,
+                        onTap: () {
+                          context.push(
+                            '/day_details',
+                            extra: DayDetailsArgs(
+                              dayPlan: dayPlan,
+                              pathId: path.id,
+                              dayIndex: index,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          }
+
+          return const SizedBox.shrink();
         },
       ),
     );

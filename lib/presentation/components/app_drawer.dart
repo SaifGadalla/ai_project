@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:ai_project/presentation/controller/path/paths_cubit.dart';
 import 'package:ai_project/l10n/app_localizations.dart';
-import 'package:ai_project/data/models/learning_path.dart';
 import 'package:ai_project/presentation/controller/auth/auth_bloc.dart';
 
 class AppDrawer extends StatelessWidget {
@@ -12,7 +10,8 @@ class AppDrawer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final authState = context.watch<AuthBloc>().state;
+    final user = authState.user;
 
     return Drawer(
       child: ListView(
@@ -32,10 +31,10 @@ class AppDrawer extends StatelessWidget {
                     color: Theme.of(context).colorScheme.onPrimary,
                   ),
                 ),
-                if (FirebaseAuth.instance.currentUser?.email != null) ...[
+                if (user?.email != null) ...[
                   const SizedBox(height: 8),
                   Text(
-                    FirebaseAuth.instance.currentUser!.email!,
+                    user!.email!,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: Theme.of(
                         context,
@@ -70,59 +69,56 @@ class AppDrawer extends StatelessWidget {
               style: Theme.of(context).textTheme.titleSmall,
             ),
           ),
-          if (userId != null)
-            StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(userId)
-                  .collection('paths')
-                  .orderBy('createdAt', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+          if (user != null)
+            BlocBuilder<PathsCubit, PathsState>(
+              builder: (context, state) {
+                if (state is PathsLoading || state is PathsInitial) {
                   return const Padding(
                     padding: EdgeInsets.all(16.0),
                     child: Center(child: CircularProgressIndicator()),
                   );
                 }
 
-                if (snapshot.hasError) {
+                if (state is PathsError) {
                   return ListTile(
                     title: Text(
-                      '${AppLocalizations.of(context)!.errorTitle}: ${snapshot.error}',
+                      '${AppLocalizations.of(context)!.errorTitle}: ${state.message}',
                     ),
                   );
                 }
 
-                final paths = snapshot.data?.docs ?? [];
+                if (state is PathsLoaded) {
+                  final paths = state.paths;
 
-                if (paths.isEmpty) {
-                  return ListTile(
-                    title: Text(AppLocalizations.of(context)!.drawerNoPaths),
+                  if (paths.isEmpty) {
+                    return ListTile(
+                      title: Text(AppLocalizations.of(context)!.drawerNoPaths),
+                    );
+                  }
+
+                  return Column(
+                    children: paths.map((path) {
+                      return ListTile(
+                        leading: const Icon(Icons.route),
+                        title: Text(
+                          path.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        onTap: () {
+                          Navigator.pop(context); // Close drawer
+                          context.push('/path/${path.id}');
+                        },
+                      );
+                    }).toList(),
                   );
                 }
-
-                return Column(
-                  children: paths.map((doc) {
-                    final path = LearningPath.fromDocument(doc);
-                    return ListTile(
-                      leading: const Icon(Icons.route),
-                      title: Text(
-                        path.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      onTap: () {
-                        Navigator.pop(context); // Close drawer
-                        context.push('/path/${path.id}');
-                      },
-                    );
-                  }).toList(),
-                );
+                
+                return const SizedBox.shrink();
               },
             ),
-          if (userId != null) const Divider(),
-          if (userId != null)
+          if (user != null) const Divider(),
+          if (user != null)
             ListTile(
               leading: const Icon(Icons.logout),
               title: const Text(

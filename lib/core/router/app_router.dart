@@ -8,11 +8,16 @@ import 'package:ai_project/presentation/controller/auth/signup_cubit.dart';
 import 'package:ai_project/presentation/controller/prompt/bloc.dart';
 import 'package:ai_project/presentation/screens/details/day_details_screen.dart';
 import 'package:ai_project/presentation/screens/home/home.dart';
-import 'package:ai_project/data/models/learning_path.dart';
 import 'package:ai_project/presentation/screens/path/path_screen.dart';
 import 'package:ai_project/presentation/screens/prompt/creation_screen.dart';
 import 'package:ai_project/presentation/screens/settings/settings_screen.dart';
-import 'package:ai_project/data/datasource/auth_service.dart';
+import 'package:ai_project/domain/usecases/auth/login_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/signup_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/get_auth_state_usecase.dart';
+import 'package:ai_project/domain/usecases/path/save_generated_path_usecase.dart';
+import 'package:ai_project/domain/usecases/path/get_path_stream_usecase.dart';
+import 'package:ai_project/domain/usecases/path/delete_path_usecase.dart';
+import 'package:ai_project/presentation/controller/path/path_cubit.dart';
 import 'package:ai_project/data/datasource/firebase_ai_repository.dart';
 import 'package:ai_project/l10n/app_localizations.dart';
 import 'go_router_refresh_stream.dart';
@@ -41,14 +46,14 @@ GoRouter createRouter(AuthBloc authBloc) {
       GoRoute(
         path: '/auth',
         builder: (context, state) => BlocProvider(
-          create: (context) => LoginCubit(context.read<AuthService>()),
+          create: (context) => LoginCubit(context.read<LoginUseCase>()),
           child: const AuthScreen(),
         ),
       ),
       GoRoute(
         path: '/signup',
         builder: (context, state) => BlocProvider(
-          create: (context) => SignupCubit(context.read<AuthService>()),
+          create: (context) => SignupCubit(context.read<SignupUseCase>()),
           child: const SignupScreen(),
         ),
       ),
@@ -61,6 +66,9 @@ GoRouter createRouter(AuthBloc authBloc) {
             create: (context) => CreationBloc(
               localizations: localizations,
               aiRepository: FirebaseAiRepository(),
+              saveGeneratedPathUseCase: context
+                  .read<SaveGeneratedPathUseCase>(),
+              getAuthStateUseCase: context.read<GetAuthStateUseCase>(),
             ),
             child: const CreationScreen(),
           );
@@ -70,14 +78,26 @@ GoRouter createRouter(AuthBloc authBloc) {
         path: '/path/:pathId',
         builder: (context, state) {
           final pathId = state.pathParameters['pathId']!;
-          return PathScreen(pathId: pathId);
+          return BlocProvider(
+            create: (context) => PathCubit(
+              pathId: pathId,
+              getPathStreamUseCase: context.read<GetPathStreamUseCase>(),
+              deletePathUseCase: context.read<DeletePathUseCase>(),
+              getAuthStateUseCase: context.read<GetAuthStateUseCase>(),
+            ),
+            child: PathScreen(pathId: pathId),
+          );
         },
       ),
       GoRoute(
         path: '/day_details',
         builder: (context, state) {
-          final day = state.extra as DayPlan;
-          return DayDetailsScreen(day: day);
+          final args = state.extra as DayDetailsArgs;
+          return DayDetailsScreen(
+            day: args.dayPlan,
+            pathId: args.pathId,
+            dayIndex: args.dayIndex,
+          );
         },
       ),
       GoRoute(

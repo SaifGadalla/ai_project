@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:ai_project/data/datasource/auth_service.dart';
+import 'package:ai_project/domain/usecases/auth/login_usecase.dart';
 
 enum LoginStatus { initial, submitting, success, error }
 
@@ -28,9 +28,9 @@ class LoginState extends Equatable {
 }
 
 class LoginCubit extends Cubit<LoginState> {
-  final AuthService _authService;
+  final LoginUseCase _loginUseCase;
 
-  LoginCubit(this._authService) : super(const LoginState());
+  LoginCubit(this._loginUseCase) : super(const LoginState());
 
   Future<void> loginWithCredentials({
     required String email,
@@ -40,7 +40,7 @@ class LoginCubit extends Cubit<LoginState> {
 
     emit(state.copyWith(status: LoginStatus.submitting));
     try {
-      await _authService.signIn(email: email, password: password);
+      await _loginUseCase(email: email, password: password);
       emit(state.copyWith(status: LoginStatus.success));
     } catch (e) {
       emit(state.copyWith(

@@ -3,14 +3,14 @@ import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:flutter/material.dart';
 
-import 'package:ai_project/data/datasource/auth_service.dart';
+import 'package:ai_project/domain/usecases/auth/login_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/signup_usecase.dart';
 import 'package:ai_project/presentation/controller/auth/login_cubit.dart';
 import 'package:ai_project/presentation/controller/auth/signup_cubit.dart';
 import 'package:ai_project/presentation/controller/theme/theme_cubit.dart';
 import 'package:ai_project/presentation/controller/locale/locale_cubit.dart';
-
-// --- Mocks ---
-class MockAuthService extends Mock implements AuthService {}
+class MockLoginUseCase extends Mock implements LoginUseCase {}
+class MockSignupUseCase extends Mock implements SignupUseCase {}
 
 void main() {
   group('ThemeCubit Tests', () {
@@ -68,11 +68,11 @@ void main() {
 
   group('LoginCubit Tests', () {
     late LoginCubit loginCubit;
-    late MockAuthService mockAuthService;
+    late MockLoginUseCase mockLoginUseCase;
 
     setUp(() {
-      mockAuthService = MockAuthService();
-      loginCubit = LoginCubit(mockAuthService);
+      mockLoginUseCase = MockLoginUseCase();
+      loginCubit = LoginCubit(mockLoginUseCase);
     });
 
     tearDown(() {
@@ -87,7 +87,7 @@ void main() {
       'emits [submitting, success] when login is successful',
       build: () {
         when(
-          () => mockAuthService.signIn(
+          () => mockLoginUseCase(
             email: 'test@test.com',
             password: 'password',
           ),
@@ -110,7 +110,7 @@ void main() {
       'emits [submitting, error] when login fails',
       build: () {
         when(
-          () => mockAuthService.signIn(
+          () => mockLoginUseCase(
             email: 'test@test.com',
             password: 'password',
           ),
@@ -133,11 +133,11 @@ void main() {
 
   group('SignupCubit Tests', () {
     late SignupCubit signupCubit;
-    late MockAuthService mockAuthService;
+    late MockSignupUseCase mockSignupUseCase;
 
     setUp(() {
-      mockAuthService = MockAuthService();
-      signupCubit = SignupCubit(mockAuthService);
+      mockSignupUseCase = MockSignupUseCase();
+      signupCubit = SignupCubit(mockSignupUseCase);
     });
 
     tearDown(() {
@@ -152,7 +152,7 @@ void main() {
       'emits [submitting, success] when signup is successful',
       build: () {
         when(
-          () => mockAuthService.signUp(
+          () => mockSignupUseCase(
             email: 'test@test.com',
             password: 'password',
             name: 'Test',

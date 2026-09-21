@@ -1,6 +1,6 @@
 import 'package:equatable/equatable.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:ai_project/data/datasource/auth_service.dart';
+import 'package:ai_project/domain/usecases/auth/signup_usecase.dart';
 
 enum SignupStatus { initial, submitting, success, error }
 
@@ -28,9 +28,9 @@ class SignupState extends Equatable {
 }
 
 class SignupCubit extends Cubit<SignupState> {
-  final AuthService _authService;
+  final SignupUseCase _signupUseCase;
 
-  SignupCubit(this._authService) : super(const SignupState());
+  SignupCubit(this._signupUseCase) : super(const SignupState());
 
   Future<void> signupWithCredentials({
     required String name,
@@ -41,7 +41,7 @@ class SignupCubit extends Cubit<SignupState> {
 
     emit(state.copyWith(status: SignupStatus.submitting));
     try {
-      await _authService.signUp(
+      await _signupUseCase(
         email: email,
         password: password,
         name: name,

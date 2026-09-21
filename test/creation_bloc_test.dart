@@ -2,15 +2,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:bloc_test/bloc_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:fake_cloud_firestore/fake_cloud_firestore.dart';
 import 'package:ai_project/presentation/controller/prompt/bloc.dart';
+import 'package:ai_project/domain/usecases/auth/get_auth_state_usecase.dart';
+import 'package:ai_project/domain/usecases/path/save_generated_path_usecase.dart';
 import 'package:ai_project/l10n/app_localizations.dart';
 import 'package:ai_project/domain/repository/ai_repository.dart';
 
 // --- Mocks ---
 class MockAiRepository extends Mock implements AiRepository {}
 
-class MockFirebaseAuth extends Mock implements FirebaseAuth {}
+class MockGetAuthStateUseCase extends Mock implements GetAuthStateUseCase {}
+class MockSaveGeneratedPathUseCase extends Mock implements SaveGeneratedPathUseCase {}
 
 class MockAppLocalizations extends Mock implements AppLocalizations {}
 
@@ -20,15 +22,15 @@ void main() {
   group('CreationBloc Tests', () {
     late CreationBloc creationBloc;
     late MockAiRepository mockAi;
-    late FakeFirebaseFirestore mockFirestore;
-    late MockFirebaseAuth mockAuth;
+    late MockGetAuthStateUseCase mockGetAuthStateUseCase;
+    late MockSaveGeneratedPathUseCase mockSaveGeneratedPathUseCase;
     late MockAppLocalizations mockLocalizations;
     late MockUser mockUser;
 
     setUp(() {
       mockAi = MockAiRepository();
-      mockFirestore = FakeFirebaseFirestore();
-      mockAuth = MockFirebaseAuth();
+      mockGetAuthStateUseCase = MockGetAuthStateUseCase();
+      mockSaveGeneratedPathUseCase = MockSaveGeneratedPathUseCase();
       mockLocalizations = MockAppLocalizations();
       mockUser = MockUser();
 
@@ -44,8 +46,8 @@ void main() {
       creationBloc = CreationBloc(
         localizations: mockLocalizations,
         aiRepository: mockAi,
-        firestore: mockFirestore,
-        auth: mockAuth,
+        getAuthStateUseCase: mockGetAuthStateUseCase,
+        saveGeneratedPathUseCase: mockSaveGeneratedPathUseCase,
       );
     });
 
@@ -84,13 +86,19 @@ void main() {
     blocTest<CreationBloc, CreationState>(
       'FinalizePath creates JSON and saves to Firestore',
       build: () {
-        when(() => mockAuth.currentUser).thenReturn(mockUser);
+        when(() => mockGetAuthStateUseCase.currentUser).thenReturn(mockUser);
         when(() => mockUser.uid).thenReturn('test_uid');
 
         when(() => mockAi.generatePathJson(any())).thenAnswer(
           (_) async =>
               '{"title": "Test Path", "description": "Desc", "days": []}',
         );
+        
+        when(() => mockSaveGeneratedPathUseCase(
+          userId: any(named: 'userId'),
+          pathData: any(named: 'pathData'),
+          originalPrompt: any(named: 'originalPrompt'),
+        )).thenAnswer((_) async => 'mocked_doc_id');
 
         // Setup initial user message so validation passes
         creationBloc.add(SendMessage('Hello'));

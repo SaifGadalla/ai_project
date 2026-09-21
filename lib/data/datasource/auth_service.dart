@@ -1,7 +1,8 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:ai_project/domain/repository/auth_repository.dart';
 
-class AuthService {
+class AuthService implements AuthRepository {
   final FirebaseAuth _firebaseAuth;
   final FirebaseFirestore _firestore;
 
@@ -9,10 +10,13 @@ class AuthService {
       : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
         _firestore = firestore ?? FirebaseFirestore.instance;
 
+  @override
   Stream<User?> get authStateChanges => _firebaseAuth.authStateChanges();
 
+  @override
   User? get currentUser => _firebaseAuth.currentUser;
 
+  @override
   Future<User?> signUp({
     required String email,
     required String password,
@@ -41,6 +45,7 @@ class AuthService {
     }
   }
 
+  @override
   Future<User?> signIn({
     required String email,
     required String password,
@@ -56,6 +61,7 @@ class AuthService {
     }
   }
 
+  @override
   Future<void> signOut() async {
     await _firebaseAuth.signOut();
   }

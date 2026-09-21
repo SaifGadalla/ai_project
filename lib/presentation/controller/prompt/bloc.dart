@@ -1,10 +1,11 @@
 import 'dart:convert';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:logging/logging.dart';
 import 'package:ai_project/l10n/app_localizations.dart';
 import 'package:ai_project/domain/repository/ai_repository.dart';
+import 'package:ai_project/domain/usecases/path/save_generated_path_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/get_auth_state_usecase.dart';
 
 // --- Models ---
 class ChatMessage {
@@ -55,19 +56,17 @@ class CreationFailure extends CreationState {
 class CreationBloc extends Bloc<CreationEvent, CreationState> {
   final AppLocalizations localizations;
   final AiRepository _aiRepository;
-  final FirebaseFirestore _firestore;
-  final FirebaseAuth _auth;
+  final SaveGeneratedPathUseCase _saveGeneratedPathUseCase;
+  final GetAuthStateUseCase _getAuthStateUseCase;
 
   final List<ChatMessage> _uiMessages = [];
 
   CreationBloc({
     required this.localizations,
     required this._aiRepository,
-    FirebaseFirestore? firestore,
-    FirebaseAuth? auth,
-  }) : _firestore = firestore ?? FirebaseFirestore.instance,
-       _auth = auth ?? FirebaseAuth.instance,
-       super(
+    required this._saveGeneratedPathUseCase,
+    required this._getAuthStateUseCase,
+  }) : super(
          CreationChatActive(
            messages: [
              ChatMessage(
@@ -118,36 +117,20 @@ class CreationBloc extends Bloc<CreationEvent, CreationState> {
           canGenerate: canGen,
         ),
       );
-    } on FirebaseException catch (e) {
-      Logger('Firebase Error Code').finer(e.code);
-      Logger('Firebase Error Message').finer(e.message);
-
-      String errorMessage =
-          localizations.promptErrorSafety; // Default to safety message
-
-      if (e.message?.contains('attestation failed') == true ||
-          e.code == 'app-check-failed') {
-        errorMessage = "App Check Failed: Please register your debug token.";
-      } else if (e.code == 'unavailable' ||
-          e.code == 'network-request-failed') {
-        errorMessage = "Network Error: Please check your internet connection.";
-      }
-
-      _uiMessages.add(ChatMessage(text: errorMessage, isUser: false));
-
-      emitter(
-        CreationChatActive(
-          messages: List.from(_uiMessages),
-          isTyping: false,
-          canGenerate: false,
-        ),
-      );
     } catch (e) {
       Logger('General Error').finer(e);
 
-      _uiMessages.add(
-        ChatMessage(text: localizations.promptErrorGeneric, isUser: false),
-      );
+      // We still want to handle the Firebase exception if it bubbles up from the repository
+      if (e.toString().contains('firebase')) {
+        _uiMessages.add(
+          ChatMessage(text: localizations.promptErrorSafety, isUser: false),
+        );
+      } else {
+        _uiMessages.add(
+          ChatMessage(text: localizations.promptErrorGeneric, isUser: false),
+        );
+      }
+
       emitter(
         CreationChatActive(
           messages: List.from(_uiMessages),
@@ -165,7 +148,7 @@ class CreationBloc extends Bloc<CreationEvent, CreationState> {
     emitter(CreationLoading());
 
     try {
-      final userId = _auth.currentUser?.uid;
+      final userId = _getAuthStateUseCase.currentUser?.uid;
       if (userId == null) {
         emitter(CreationFailure(localizations.promptErrorUnauthenticated));
         return;
@@ -174,19 +157,17 @@ class CreationBloc extends Bloc<CreationEvent, CreationState> {
       // 1. Get the final structured data from repository
       final responseText = await _aiRepository.generatePathJson('');
 
-      // 2. Parse and save to Firestore
+      // 2. Parse and save to Firestore using Use Case
       final Map<String, dynamic> pathData = jsonDecode(responseText);
-      pathData['createdAt'] = FieldValue.serverTimestamp();
-      pathData['userId'] = userId;
-      pathData['originalPrompt'] = _uiMessages.firstWhere((m) => m.isUser).text;
+      final originalPrompt = _uiMessages.firstWhere((m) => m.isUser).text;
 
-      final docRef = await _firestore
-          .collection('users')
-          .doc(userId)
-          .collection('paths')
-          .add(pathData);
+      final docId = await _saveGeneratedPathUseCase(
+        userId: userId,
+        pathData: pathData,
+        originalPrompt: originalPrompt,
+      );
 
-      emitter(CreationSuccess(docRef.id));
+      emitter(CreationSuccess(docId));
     } catch (e) {
       emitter(CreationFailure(e.toString()));
     }

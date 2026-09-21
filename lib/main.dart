@@ -6,6 +6,19 @@ import 'package:ai_project/presentation/controller/theme/theme_cubit.dart';
 import 'package:ai_project/presentation/controller/locale/locale_cubit.dart';
 import 'package:ai_project/presentation/controller/auth/auth_bloc.dart';
 import 'package:ai_project/data/datasource/auth_service.dart';
+import 'package:ai_project/domain/repository/auth_repository.dart';
+import 'package:ai_project/domain/usecases/auth/get_auth_state_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/logout_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/login_usecase.dart';
+import 'package:ai_project/domain/usecases/auth/signup_usecase.dart';
+import 'package:ai_project/presentation/controller/path/paths_cubit.dart';
+import 'package:ai_project/domain/repository/path_repository.dart';
+import 'package:ai_project/data/repository/path_repository_impl.dart';
+import 'package:ai_project/domain/usecases/path/get_user_paths_usecase.dart';
+import 'package:ai_project/domain/usecases/path/save_generated_path_usecase.dart';
+import 'package:ai_project/domain/usecases/path/get_path_stream_usecase.dart';
+import 'package:ai_project/domain/usecases/path/delete_path_usecase.dart';
+import 'package:ai_project/domain/usecases/path/update_task_status_usecase.dart';
 import 'package:ai_project/core/router/app_router.dart';
 import 'package:ai_project/core/utils/theme_manager.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -28,8 +41,42 @@ Future<void> main() async {
   });
 
   runApp(
-    RepositoryProvider<AuthService>(
-      create: (_) => AuthService(),
+    MultiRepositoryProvider(
+      providers: [
+        RepositoryProvider<AuthRepository>(
+          create: (_) => AuthService(),
+        ),
+        RepositoryProvider<GetAuthStateUseCase>(
+          create: (context) => GetAuthStateUseCase(context.read<AuthRepository>()),
+        ),
+        RepositoryProvider<LogoutUseCase>(
+          create: (context) => LogoutUseCase(context.read<AuthRepository>()),
+        ),
+        RepositoryProvider<LoginUseCase>(
+          create: (context) => LoginUseCase(context.read<AuthRepository>()),
+        ),
+        RepositoryProvider<SignupUseCase>(
+          create: (context) => SignupUseCase(context.read<AuthRepository>()),
+        ),
+        RepositoryProvider<PathRepository>(
+          create: (_) => PathRepositoryImpl(),
+        ),
+        RepositoryProvider<GetUserPathsUseCase>(
+          create: (context) => GetUserPathsUseCase(context.read<PathRepository>()),
+        ),
+        RepositoryProvider<SaveGeneratedPathUseCase>(
+          create: (context) => SaveGeneratedPathUseCase(context.read<PathRepository>()),
+        ),
+        RepositoryProvider<GetPathStreamUseCase>(
+          create: (context) => GetPathStreamUseCase(context.read<PathRepository>()),
+        ),
+        RepositoryProvider<DeletePathUseCase>(
+          create: (context) => DeletePathUseCase(context.read<PathRepository>()),
+        ),
+        RepositoryProvider<UpdateTaskStatusUseCase>(
+          create: (context) => UpdateTaskStatusUseCase(context.read<PathRepository>()),
+        ),
+      ],
       child: const MyApp(),
     ),
   );
@@ -45,7 +92,16 @@ class MyApp extends StatelessWidget {
         BlocProvider(create: (_) => ThemeCubit()),
         BlocProvider(create: (_) => LocaleCubit()),
         BlocProvider(
-          create: (_) => AuthBloc(authService: context.read<AuthService>()),
+          create: (_) => AuthBloc(
+            getAuthStateUseCase: context.read<GetAuthStateUseCase>(),
+            logoutUseCase: context.read<LogoutUseCase>(),
+          ),
+        ),
+        BlocProvider(
+          create: (context) => PathsCubit(
+            context.read<GetUserPathsUseCase>(),
+            context.read<GetAuthStateUseCase>(),
+          ),
         ),
       ],
       child: const AppView(),
